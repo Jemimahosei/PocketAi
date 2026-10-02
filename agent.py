@@ -1,27 +1,46 @@
-import anthropic
-import json
+"""
+agent.py — Jemi CLI AI Agent
+
+Agentic loop: sends user messages to Claude, handles tool calls,
+and displays results with a rich terminal UI.
+"""
+
+import sys
+from anthropic import Anthropic
+from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.text import Text
+from rich.rule import Rule
+from rich import box
+
 from config import ANTHROPIC_API_KEY, MODEL, AGENT_NAME, MAX_TOKENS
+from config_manager import get_agent_name
 from tools.file_tool import read_file, list_directory
 from tools.search_tool import search_web
 
-# Initialize the Anthropic client once when the agent starts
-# This creates a persistent connection we reuse for every message
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+# ── Client & UI setup ────────────────────────────────────────────────────────
 
-# Define the tools Claude can use
-# This is the MCP layer — we describe each tool in a standard format
-# Claude reads these descriptions to know WHAT tools exist and WHEN to use them
-# It never sees the actual Python code — only these descriptions
-TOOLS = [
+client = Anthropic(api_key=ANTHROPIC_API_KEY)
+console = Console()
+
+# Load agent name from ~/.jemi/config.json (runs first-run setup if needed)
+AGENT_NAME = get_agent_name(fallback=AGENT_NAME)
+
+# ── Tool schemas (what we tell Claude it can call) ────────────────────────────
+
+TOOL_SCHEMAS = [
     {
         "name": "read_file",
-        "description": "Reads the contents of a file from the local filesystem. Use this when the user asks about a specific file or wants you to analyze something on their computer.",
+        "description": "Read the contents of a file from the local filesystem.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The file path to read, e.g. '~/resume.txt' or './notes.md'"
+                    "description": "Path to the file to read."
                 }
             },
             "required": ["path"]
@@ -29,27 +48,28 @@ TOOLS = [
     },
     {
         "name": "list_directory",
-        "description": "Lists all files and folders in a directory. Use this when the user wants to know what files exist in a location.",
+        "description": "List all files and folders in a directory.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The directory path to list, e.g. '.' for current directory or '~/Documents'"
+                    "description": "Directory path to list. Defaults to current directory.",
+                    "default": "."
                 }
             },
-            "required": ["path"]
+            "required": []
         }
     },
     {
         "name": "search_web",
-        "description": "Searches the web for current information. Use this when the user asks about recent events, needs facts you might not know, or wants to research something.",
+        "description": "Search the web using DuckDuckGo and return relevant results.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query, e.g. 'Meta SWE interview tips 2026'"
+                    "description": "The search query."
                 }
             },
             "required": ["query"]
@@ -57,174 +77,167 @@ TOOLS = [
     }
 ]
 
-# Maps tool names (strings) to actual Python functions
-# When Claude says "call read_file", we look it up here and run it
+# Maps tool name → actual Python function
 TOOL_FUNCTIONS = {
     "read_file": read_file,
     "list_directory": list_directory,
-    "search_web": search_web
+    "search_web": search_web,
 }
+
+# ── Tool execution ────────────────────────────────────────────────────────────
 
 def run_tool(tool_name: str, tool_input: dict) -> str:
     """
-    Executes a tool by name with the given inputs.
-    
-    This is the bridge between Claude's decisions and real Python execution.
-    Claude decides WHAT to call. This function actually RUNS it.
-    
+    Dispatches a tool call from Claude to the correct Python function.
+
     Args:
-        tool_name: The name of the tool to run
-        tool_input: The arguments to pass to the tool
-        
+        tool_name:  Name of the tool Claude wants to call.
+        tool_input: Arguments Claude is passing to the tool.
+
     Returns:
-        The tool's output as a string
+        The tool's output as a string.
     """
     if tool_name not in TOOL_FUNCTIONS:
-        return f"Error: Unknown tool '{tool_name}'"
-    
-    # Look up the function and call it with the provided arguments
-    # **tool_input unpacks the dict as keyword arguments
-    # e.g. {"path": "~/resume.txt"} becomes read_file(path="~/resume.txt")
-    tool_function = TOOL_FUNCTIONS[tool_name]
-    return tool_function(**tool_input)
+        return f"Error: unknown tool '{tool_name}'"
+    return TOOL_FUNCTIONS[tool_name](**tool_input)
+
+# ── UI helpers ────────────────────────────────────────────────────────────────
+
+def print_tool_call(tool_name: str, tool_input: dict) -> None:
+    """Renders a tool call as a compact panel."""
+    args = ", ".join(f"{k}={repr(v)}" for k, v in tool_input.items())
+    console.print(
+        Panel(
+            f"[bold cyan]{tool_name}[/bold cyan]([yellow]{args}[/yellow])",
+            title="[dim]tool call[/dim]",
+            border_style="dim cyan",
+            padding=(0, 1),
+        )
+    )
+
+def print_tool_result(result: str) -> None:
+    """Renders a tool result as a dim panel."""
+    # Truncate very long results for display
+    display = result if len(result) <= 600 else result[:600] + "\n[dim]… (truncated)[/dim]"
+    console.print(
+        Panel(
+            display,
+            title="[dim]result[/dim]",
+            border_style="dim green",
+            padding=(0, 1),
+        )
+    )
+
+def print_jemi_response(text: str) -> None:
+    """Renders Jemi's final response as a markdown panel."""
+    console.print(
+        Panel(
+            Markdown(text),
+            title=f"[bold magenta]{AGENT_NAME}[/bold magenta]",
+            border_style="magenta",
+            padding=(1, 2),
+        )
+    )
+
+# ── Agentic loop ──────────────────────────────────────────────────────────────
 
 def chat(user_message: str, conversation_history: list) -> tuple[str, list]:
     """
-    Sends a message to Claude and handles the full agentic loop.
-    
-    The agentic loop works like this:
-    1. Send message to Claude with available tools
-    2. Claude responds — either with text OR a tool call
-    3. If tool call: run the tool, send result back to Claude
-    4. Claude responds again — repeat until Claude gives final text answer
-    5. Return the final answer
-    
+    Sends a user message through the agentic loop.
+
+    Handles multi-step tool use: Claude may call tools, receive results,
+    then call more tools before giving a final answer.
+
     Args:
-        user_message: What the user typed
-        conversation_history: All previous messages (so Claude has context)
-        
+        user_message:          The user's input string.
+        conversation_history:  Running list of messages (mutated in place).
+
     Returns:
-        Tuple of (Claude's response text, updated conversation history)
+        (final_text, updated_history)
     """
-    # Add the user's message to conversation history
-    # We keep history so Claude remembers what was said earlier in the session
-    conversation_history.append({
-        "role": "user",
-        "content": user_message
-    })
-    
-    # The agentic loop — keeps running until Claude gives a final text response
+    conversation_history.append({"role": "user", "content": user_message})
+
     while True:
-        # Send the conversation to Claude with our tool definitions
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=f"""You are {AGENT_NAME}, a helpful AI assistant that lives in the terminal.
-You have access to tools that let you read files and search the web.
-Be concise and direct. When you use a tool, explain what you found.
-If the user asks about files, use list_directory first to see what exists.""",
-            messages=conversation_history,
-            tools=TOOLS
-        )
-        
-        # Check why Claude stopped generating
-        # "end_turn" = Claude finished with a text answer
-        # "tool_use" = Claude wants to call a tool
+        with Live(Spinner("dots", text=" thinking…", style="dim"), console=console, refresh_per_second=10):
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                system=(
+                    f"You are {AGENT_NAME}, a helpful AI assistant running in the terminal. "
+                    "Be concise and direct. Use markdown formatting in your responses."
+                ),
+                tools=TOOL_SCHEMAS,
+                messages=conversation_history,
+            )
+
+        # ── End turn: Claude has a final answer ──────────────────────────────
         if response.stop_reason == "end_turn":
-            # Extract the text from Claude's response
-            assistant_message = response.content[0].text
-            
-            # Add Claude's response to history for next turn
-            conversation_history.append({
-                "role": "assistant",
-                "content": assistant_message
-            })
-            
-            return assistant_message, conversation_history
-        
-        elif response.stop_reason == "tool_use":
-            # Claude wants to use one or more tools
-            # Add Claude's full response to history (including the tool call)
-            conversation_history.append({
-                "role": "assistant",
-                "content": response.content
-            })
-            
-            # Process each tool call Claude requested
+            final_text = "".join(
+                block.text for block in response.content if hasattr(block, "text")
+            )
+            conversation_history.append({"role": "assistant", "content": response.content})
+            return final_text, conversation_history
+
+        # ── Tool use: Claude wants to call one or more tools ─────────────────
+        if response.stop_reason == "tool_use":
+            conversation_history.append({"role": "assistant", "content": response.content})
+
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    print(f"\n  🔧 Using tool: {block.name}({json.dumps(block.input)})")
-                    
-                    # Run the actual Python function
+                    print_tool_call(block.name, block.input)
                     result = run_tool(block.name, block.input)
-                    
-                    # Format the result in the way Anthropic's API expects
+                    print_tool_result(result)
                     tool_results.append({
                         "type": "tool_result",
-                        "tool_use_id": block.id,  # Links result to the specific tool call
-                        "content": result
+                        "tool_use_id": block.id,
+                        "content": result,
                     })
-            
-            # Send tool results back to Claude so it can reason about them
-            conversation_history.append({
-                "role": "user",
-                "content": tool_results
-            })
-            # Loop continues — Claude will now respond with either more tool calls or final answer
-        
-        else:
-            # Unexpected stop reason — break to avoid infinite loop
-            break
-    
-    return "I encountered an unexpected error.", conversation_history
 
+            conversation_history.append({"role": "user", "content": tool_results})
+            # Loop — Claude will now respond to the tool results
+            continue
 
-def main():
-    """
-    The main entry point — starts the interactive CLI session.
-    Runs a loop that takes user input and prints Claude's responses.
-    """
-    print(f"\n{'='*50}")
-    print(f"  {AGENT_NAME} — Your AI Terminal Assistant")
-    print(f"{'='*50}")
-    print("  Commands: 'quit' or 'exit' to stop")
-    print("  Try: 'list my files' or 'search for Meta SWE tips'")
-    print(f"{'='*50}\n")
-    
-    # Conversation history persists across the session
-    # This is what makes it feel like a real conversation, not isolated Q&A
-    conversation_history = []
-    
+        # Unexpected stop reason
+        break
+
+    return "Something went wrong — unexpected stop reason.", conversation_history
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main() -> None:
+    """Interactive CLI loop with rich terminal UI."""
+    console.print()
+    console.print(Panel(
+        f"[bold magenta]{AGENT_NAME}[/bold magenta] — [dim]AI Terminal Assistant[/dim]\n"
+        "[dim]Type [bold]quit[/bold] or [bold]exit[/bold] to stop[/dim]\n"
+        "[dim]Try: [italic]list my files[/italic] · [italic]read agent.py[/italic] · [italic]search for …[/italic][/dim]",
+        border_style="magenta",
+        box=box.DOUBLE,
+        padding=(1, 3),
+    ))
+    console.print()
+
+    conversation_history: list = []
+
     while True:
         try:
-            # Get input from the user
-            # The '▶ ' is just a visual prompt so you know where to type
-            user_input = input("▶  You: ").strip()
-            
-            # Skip empty input
-            if not user_input:
-                continue
-            
-            # Exit commands
-            if user_input.lower() in ['quit', 'exit', 'q']:
-                print(f"\n  Goodbye! 👋\n")
-                break
-            
-            print(f"\n  {AGENT_NAME} is thinking...\n")
-            
-            # Send to Claude and get response
-            response, conversation_history = chat(user_input, conversation_history)
-            
-            print(f"  {AGENT_NAME}: {response}\n")
-            
-        except KeyboardInterrupt:
-            # Handles Ctrl+C gracefully instead of showing an ugly error
-            print(f"\n\n  Goodbye! 👋\n")
+            user_input = console.input("[bold green]You ▶[/bold green]  ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]Goodbye![/dim]")
+            sys.exit(0)
+
+        if not user_input:
+            continue
+        if user_input.lower() in {"quit", "exit"}:
+            console.print(Panel("[dim]Goodbye! 👋[/dim]", border_style="dim"))
             break
 
+        console.print()
+        response_text, conversation_history = chat(user_input, conversation_history)
+        console.print()
+        print_jemi_response(response_text)
+        console.print()
 
-# This is standard Python — only run main() if this file is executed directly
-# Not when it's imported by another file
 if __name__ == "__main__":
     main()

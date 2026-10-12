@@ -183,7 +183,7 @@ export default function App() {
       }
     } catch (e) {
       if (e.name !== "AbortError") {
-        setMessages(prev => { const next = [...prev]; next[next.length - 1] = { role: "assistant", content: "Connection error — is the server running?", toolCalls: [] }; return next; });
+        setMessages(prev => { const next = [...prev]; next[next.length - 1] = { role: "assistant", content: "To chat, run PocketAI locally on your computer. See the banner above for one-command setup.", toolCalls: [] }; return next; });
       }
     }
     setLoading(false); inputRef.current?.focus();

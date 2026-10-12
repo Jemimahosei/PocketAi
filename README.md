@@ -1,5 +1,7 @@
 # PocketAI — An AI That Knows Your Computer
 
+> **[▶ Try the live demo → pocket-ai-sage.vercel.app](https://pocket-ai-sage.vercel.app)**
+
 Most AI assistants live in the cloud and know nothing about you. PocketAI runs locally on your Mac and can actually see your files, read your PDFs, search your folders, and answer questions about *your* stuff — not just the internet.
 
 Ask it things like:
@@ -8,24 +10,31 @@ Ask it things like:
 - "Read my notes.txt and help me turn it into an email"
 - "Search the web for internships and save the results to a file"
 
-## Get it in one command
+---
+
+## Run it in one command
 
 Free — no API key, powered by Llama 3:
 
     curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install.sh | bash
 
-Smarter responses — powered by Claude (needs Anthropic API key, ~$5/month):
+Smarter responses — powered by Claude (~$5/month):
 
     curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install-claude.sh | bash
+
+---
 
 ## What it can do
 
 - Read any file on your computer (.txt, .pdf, .py, .md, .csv and more)
 - Browse your folders and find files by name
 - Search the web without needing an API key
-- Stream responses live as it thinks
-- Remember your conversation history within a session
-- Run entirely on your machine — your files never leave your computer
+- Voice input — speak your message instead of typing
+- Edit messages — click to edit and resend any message
+- Streams responses live as it thinks
+- Runs entirely on your machine — your files never leave your computer
+
+---
 
 ## Stack
 
@@ -35,7 +44,9 @@ Smarter responses — powered by Claude (needs Anthropic API key, ~$5/month):
 - pymupdf for PDF reading
 - DuckDuckGo for free web search
 
-## Manual setup
+---
+
+## Manual Setup
 
     git clone https://github.com/Jemimahosei/PocketAi.git
     cd PocketAi

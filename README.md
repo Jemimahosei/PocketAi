@@ -1,75 +1,52 @@
-# PocketAI — Your Personal AI Agent
+# PocketAI — An AI That Knows Your Computer
 
-A local AI agent with a web UI and terminal interface. Chat with an AI that can read your files, browse directories, search the web, and read PDFs — running on your machine.
+Most AI assistants live in the cloud and know nothing about you. PocketAI runs locally on your Mac and can actually see your files, read your PDFs, search your folders, and answer questions about *your* stuff — not just the internet.
 
-## Run it in one command
+Ask it things like:
+- "Summarize the PDF in my Downloads folder"
+- "What files did I add to Desktop this week?"
+- "Read my notes.txt and help me turn it into an email"
+- "Search the web for internships and save the results to a file"
 
-Free (Llama 3, no API key):
+## Get it in one command
+
+Free — no API key, powered by Llama 3:
 
     curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install.sh | bash
 
-Smarter (Claude API):
+Smarter responses — powered by Claude (needs Anthropic API key, ~$5/month):
 
     curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install-claude.sh | bash
 
-## Features
+## What it can do
 
-- Web UI — React frontend with streaming responses
-- Voice input — speak your message with the mic button
-- File tools — read any file, list any directory
-- PDF reading — extract text from PDF files
-- Web search — no API key required
-- Edit messages — click pencil icon to edit and resend
-- File path links — click any file path to copy it
+- Read any file on your computer (.txt, .pdf, .py, .md, .csv and more)
+- Browse your folders and find files by name
+- Search the web without needing an API key
+- Stream responses live as it thinks
+- Remember your conversation history within a session
+- Run entirely on your machine — your files never leave your computer
 
 ## Stack
 
-- Python 3.11 + Flask (backend, SSE streaming)
+- Python + Flask (backend with SSE streaming)
 - React + Vite (frontend)
-- Anthropic Claude API or Ollama (local, free)
-- pymupdf — PDF reading
-- DuckDuckGo — free web search
+- Claude API or Ollama (your choice of AI model)
+- pymupdf for PDF reading
+- DuckDuckGo for free web search
 
-## Manual Setup
+## Manual setup
 
     git clone https://github.com/Jemimahosei/PocketAi.git
     cd PocketAi
     pip install -r requirements.txt
 
-Create config.py (not committed):
+Add your API key to config.py (already in .gitignore):
 
     ANTHROPIC_API_KEY = "your-key-here"
-    MODEL = "claude-haiku-4-5-20251001"
-    AGENT_NAME = "PocketAI"
-    MAX_TOKENS = 4096
 
-Start backend:
+Start it:
 
     python server/app.py
 
-Start frontend (new terminal):
-
-    cd pocketai-client
-    npm install && npm run dev
-
-Open http://localhost:5173
-
-## Project Structure
-
-    PocketAi/
-    ├── server/app.py
-    ├── tools/
-    │   ├── file_tool.py
-    │   ├── search_tool.py
-    │   └── pdf_tool.py
-    ├── config_manager.py
-    ├── requirements.txt
-    ├── install.sh
-    ├── install-claude.sh
-    └── pocketai-client/
-
-## Roadmap
-
-- Ollama support for free local inference
-- Shell execution tool
-- Deploy web version with domain
+Open http://localhost:5173 in your browser.

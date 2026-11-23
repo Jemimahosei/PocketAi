@@ -123,7 +123,7 @@ export const INSTALLS = [
 
 export const TOOLS = [
   { name: "read_file", text: "Opens a text file, such as notes, code, CSVs or Markdown.", phoneText: "Opens a text file, such as notes, code, CSVs or Markdown." },
-  { name: "read_pdf", text: "Reads the text inside a PDF, up to the first 8,000 characters.", phoneText: "Reads the text inside a PDF." },
+  { name: "read_pdf", text: "Reads the text inside a PDF, up to the first 30,000 characters.", phoneText: "Reads the text inside a PDF." },
   { name: "list_directory", text: "Looks inside a folder to find the file you mean.", phoneText: "Looks inside a folder to find the file you mean." },
   { name: "search_web", text: "Searches DuckDuckGo when the answer is not in your files.", phoneText: "Searches DuckDuckGo when the answer is not in your files." },
 ];

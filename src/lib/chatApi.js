@@ -42,7 +42,12 @@ export async function streamChat({ message, history, model, signal, onToken, onT
     } catch {
       /* non-JSON error body — nothing more to learn */
     }
-    throw new Error(detail || "chat failed");
+    // Server-sent explanations (e.g. "Ollama is not running") are
+    // flagged so the chat page can show them inline instead of
+    // treating every failure as a dead server.
+    throw Object.assign(new Error(detail || "chat failed"), {
+      serverMessage: Boolean(detail),
+    });
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -87,7 +92,9 @@ export async function streamChat({ message, history, model, signal, onToken, onT
   // failed outright (e.g. Ollama stopped mid-request) — surface it the
   // same way as a dead server. Errors after partial content are left
   // alone so the user keeps what already streamed in.
-  if (streamError && !sawData) throw new Error(streamError);
+  if (streamError && !sawData) {
+    throw Object.assign(new Error(streamError), { serverMessage: true });
+  }
 }
 
 export function toolArg(input) {

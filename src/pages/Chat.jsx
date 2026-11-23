@@ -1,31 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RUNS, INSTALLS, matchRun } from "../data/samples";
-import { fetchAgentName, streamChat, toolArg } from "../lib/chatApi";
+import { RUNS, INSTALLS } from "../data/samples";
+import { streamChat, toolArg } from "../lib/chatApi";
 import { Logo, MicIcon, SendIcon, ToolStep, AnswerText } from "../components/ui";
 
-const STATE_BUTTONS = [
-  ["empty", "Empty"],
-  ["working", "Working"],
-  ["run", "Answer"],
-  ["offline", "Server not running"],
-];
-
-export default function Chat({ onBack, modelId }) {
+export default function Chat({ onBack, modelId, onPickModel, serverInfo, serverDown }) {
   const model = INSTALLS.find((i) => i.id === modelId) || INSTALLS[0];
-  const [agentName, setAgentName] = useState("PocketAI");
-  const [conn, setConn] = useState("checking"); // checking | live | offline
+  const agentName = serverInfo?.name || "PocketAI";
+  const hosted = serverInfo?.environment === "hosted";
+  const fileTools = serverInfo?.file_tools !== false;
+  const conn = serverDown ? "offline" : serverInfo ? "live" : "checking";
 
-  // Demo (mockup) state — used until a live conversation starts, and
-  // whenever the local server is not running. Works with no API key.
-  const [demoState, setDemoState] = useState("empty"); // empty|working|run|unknown|offline
-  const [demoRun, setDemoRun] = useState(0);
-  const [asked, setAsked] = useState("");
+  const [messages, setMessages] = useState(null); // null = no conversation yet
+  const [showOffline, setShowOffline] = useState(false);
   const [draft, setDraft] = useState("");
   const [copyNote, setCopyNote] = useState("");
   const [copiedPath, setCopiedPath] = useState("");
-
-  // Live conversation state (previous frontend's behaviour, restyled).
-  const [messages, setMessages] = useState(null); // null = demo/preview
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
@@ -34,52 +23,21 @@ export default function Chat({ onBack, modelId }) {
   const recogRef = useRef(null);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
-  const timerRef = useRef(null);
 
   useEffect(() => {
-    fetchAgentName()
-      .then((name) => {
-        if (name) setAgentName(name);
-        setConn("live");
-      })
-      .catch(() => {
-        setConn("offline");
-        setDemoState("offline");
-      });
-    return () => clearTimeout(timerRef.current);
-  }, []);
+    if (serverDown) setShowOffline(true);
+  }, [serverDown]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, demoState]);
+  }, [messages, showOffline]);
 
   const noteCopy = useCallback((path) => {
     setCopiedPath(path);
     setCopyNote(`Copied ${path}`);
   }, []);
 
-  // ── Demo runs ──────────────────────────────────────────────────────────
-  const goDemo = useCallback((j, text) => {
-    clearTimeout(timerRef.current);
-    setDemoRun(j);
-    setAsked(text);
-    setDemoState("working");
-    setCopyNote("");
-    setCopiedPath("");
-    timerRef.current = setTimeout(() => setDemoState("run"), 1300);
-  }, []);
-
-  const pickState = (mode) => {
-    setMessages(null);
-    if (mode === "working") goDemo(demoRun, RUNS[demoRun].ask);
-    else {
-      clearTimeout(timerRef.current);
-      setAsked(RUNS[demoRun].ask);
-      setDemoState(mode);
-    }
-  };
-
-  // ── Live sending (SSE, same contract as before) ───────────────────────
+  // ── Live sending (SSE) ────────────────────────────────────────────────
   const sendLive = useCallback(
     async (text, baseMessages) => {
       const history = baseMessages
@@ -118,12 +76,21 @@ export default function Chat({ onBack, modelId }) {
           },
         });
       } catch (e) {
-        if (e.name !== "AbortError") {
-          // Server went away mid-chat: fall back to the mockup's
-          // "not running" state instead of a dead thread.
-          setConn("offline");
+        if (e.name === "AbortError") {
+          // Stopped by the user — keep whatever streamed in.
+        } else if (e.serverMessage) {
+          // The server explained the problem (key rejected, model not
+          // running, …). Show it in the thread; the conversation and
+          // the connection both survive.
+          const base = content || toolCalls.length ? next : next.slice(0, -1);
+          setMessages([...base, { role: "error", content: e.message }]);
+        } else if (content || toolCalls.length || baseMessages.length) {
+          // The server died mid-conversation — keep the thread and say so.
+          setMessages([...next, { role: "error", content: "The server stopped answering. Your earlier messages are still here." }]);
+        } else {
+          // Nothing ever arrived: the server is not there at all.
           setMessages(null);
-          setDemoState("offline");
+          setShowOffline(true);
         }
       }
       setLoading(false);
@@ -132,19 +99,12 @@ export default function Chat({ onBack, modelId }) {
     [modelId]
   );
 
-  const send = () => {
-    const text = draft.trim();
-    if (!text || loading) return;
+  const submit = (text) => {
+    const t = (text ?? draft).trim();
+    if (!t || loading) return;
     setDraft("");
-    if (messages !== null || conn === "live") {
-      sendLive(text, messages || []);
-    } else {
-      const j = matchRun(text);
-      if (j < 0) {
-        setAsked(text);
-        setDemoState("unknown");
-      } else goDemo(j, text);
-    }
+    setShowOffline(false);
+    sendLive(t, messages || []);
   };
 
   const stop = () => {
@@ -176,14 +136,13 @@ export default function Chat({ onBack, modelId }) {
   };
 
   // ── Files it opened (sidebar) ─────────────────────────────────────────
-  const demoFiles = demoState === "run" ? RUNS[demoRun].files : [];
-  const liveFiles = [];
+  const files = [];
   if (messages) {
     for (const m of messages) {
       for (const tc of m.toolCalls || []) {
         if (tc.arg && (tc.name === "read_file" || tc.name === "read_pdf" || tc.name === "list_directory")) {
-          if (!liveFiles.some((f) => f.name === tc.arg)) {
-            liveFiles.push({
+          if (!files.some((f) => f.name === tc.arg)) {
+            files.push({
               name: tc.arg,
               hint: tc.name === "list_directory" ? "Folder" : tc.name === "read_pdf" ? "PDF" : "File",
             });
@@ -192,7 +151,6 @@ export default function Chat({ onBack, modelId }) {
       }
     }
   }
-  const files = messages !== null ? liveFiles : demoFiles;
 
   const copyFile = (name) => {
     try {
@@ -202,9 +160,6 @@ export default function Chat({ onBack, modelId }) {
     }
     noteCopy(name);
   };
-
-  const r = RUNS[demoRun];
-  const showThread = messages !== null || demoState === "working" || demoState === "run" || demoState === "unknown";
 
   return (
     <div className="page chat-page">
@@ -219,31 +174,18 @@ export default function Chat({ onBack, modelId }) {
         <button type="button" className="text-link back-link phone-only" onClick={onBack}>
           Back
         </button>
-        {messages === null && (
-          <>
-            <span className="phone-hide">Mockup states:</span>
-            <div role="group" aria-label="Mockup state" className="state-group phone-hide">
-              {STATE_BUTTONS.map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className="state-btn"
-                  aria-pressed={demoState === mode}
-                  style={{
-                    borderColor: demoState === mode ? "#1c2630" : "#b6bdc6",
-                    background: demoState === mode ? "#ecd9a0" : "#fdfdfc",
-                  }}
-                  onClick={() => pickState(mode)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <span className="phone-hide">Type one of the sample questions, or tap a chip.</span>
-          </>
+        {conn === "live" && (
+          <span>
+            {hosted
+              ? `Connected to the hosted ${agentName} demo — file access is off on the website.`
+              : `Connected to ${agentName} on this computer.`}
+          </span>
         )}
-        {messages !== null && <span>Connected to {agentName} on this computer.</span>}
-        <span className="phone-only mono model-badge">{model.modelLabel}, local</span>
+        {conn === "offline" && <span>Not connected.</span>}
+        <span className="phone-only mono model-badge">
+          {model.modelLabel}
+          {model.id === "llama" ? ", local" : ", cloud"}
+        </span>
       </div>
 
       <div className="chat-layout">
@@ -257,7 +199,9 @@ export default function Chat({ onBack, modelId }) {
             <div className="folder-box">
               {files.length === 0 && (
                 <p className="folder-empty">
-                  Nothing yet. Each file PocketAI opens in this chat is filed here, and you can copy its path.
+                  {fileTools
+                    ? "Nothing yet. Each file PocketAI opens in this chat is filed here, and you can copy its path."
+                    : "File access is off on this hosted demo. In the local install, each file PocketAI opens is filed here."}
                 </p>
               )}
               {files.map((f) => (
@@ -268,23 +212,58 @@ export default function Chat({ onBack, modelId }) {
               ))}
             </div>
           </div>
-          <div className="model-note">
-            Model <span className="mono">{model.modelLabel}</span>
-            {model.id === "llama" ? ", running on this computer. Nothing is sent anywhere." : ", via Anthropic."}
+          <div>
+            <div className="folder-tab-label">Model</div>
+            <div role="group" aria-label="Choose the model" className="state-group">
+              {INSTALLS.map((i) => {
+                const avail = serverInfo?.backends?.[i.id]?.available;
+                return (
+                  <button
+                    key={i.id}
+                    type="button"
+                    className="state-btn"
+                    aria-pressed={modelId === i.id}
+                    disabled={avail === false}
+                    title={
+                      avail === false
+                        ? i.id === "llama"
+                          ? "Ollama is not running, so Llama can't answer right now"
+                          : "Claude is not set up on this server"
+                        : i.name
+                    }
+                    style={{
+                      borderColor: modelId === i.id ? "#1c2630" : "#b6bdc6",
+                      background: modelId === i.id ? "#ecd9a0" : "#fdfdfc",
+                      opacity: avail === false ? 0.5 : 1,
+                    }}
+                    onClick={() => onPickModel?.(i.id)}
+                  >
+                    {i.modelLabel}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="model-note">
+              Model <span className="mono">{model.modelLabel}</span>
+              {model.id === "llama" ? ", running on this computer. Nothing is sent anywhere." : ", via Anthropic."}
+            </div>
           </div>
         </aside>
 
         <section className="chat-main">
           <div className="chat-card">
             <div className="thread" aria-live="polite" ref={scrollRef}>
-              {/* ── Demo / preview thread ─────────────────────────────── */}
-              {messages === null && demoState === "empty" && (
+              {messages === null && !showOffline && (
                 <div className="empty-state">
                   <h1>What should I look up?</h1>
-                  <p>Ask about a file, a folder, or anything on the web. I will say which tool I am using.</p>
+                  <p>
+                    {hosted
+                      ? "Ask me anything, or ask about the web. This hosted demo can't open files on your computer — file access works in the free local install."
+                      : "Ask about a file, a folder, or anything on the web. I will say which tool I am using."}
+                  </p>
                   <div className="chips">
-                    {RUNS.map((x, j) => (
-                      <button key={x.key} type="button" className="chip" onClick={() => goDemo(j, x.ask)}>
+                    {RUNS.map((x) => (
+                      <button key={x.key} type="button" className="chip" onClick={() => submit(x.ask)}>
                         {x.ask}
                       </button>
                     ))}
@@ -292,83 +271,34 @@ export default function Chat({ onBack, modelId }) {
                 </div>
               )}
 
-              {messages === null && showThread && (
-                <div className="user-row">
-                  <div className="bubble user">{asked || r.ask}</div>
-                  <button
-                    type="button"
-                    className="edit-link"
-                    onClick={() => {
-                      setDraft(asked || r.ask);
-                      setDemoState("empty");
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    Edit and resend
-                  </button>
-                </div>
-              )}
-
-              {messages === null && demoState === "working" && (
-                <div className="answer-block">
-                  <ToolStep tool={r.tool} arg={r.arg} note="looking" dashed />
-                  <div className="dots" role="status" aria-label="PocketAI is working">
-                    <span className="dot" />
-                    <span className="dot" />
-                    <span className="dot" />
-                  </div>
-                </div>
-              )}
-
-              {messages === null && demoState === "run" && (
-                <div className="answer-block">
-                  <div className="steps">
-                    {r.steps.map((s, i) => (
-                      <ToolStep key={i} tool={s.tool} arg={s.arg} note={s.note} stamp={s.stamp} />
-                    ))}
-                  </div>
-                  <div className="bubble assistant answer-bubble">
-                    <AnswerText segments={r.answer} onCopy={noteCopy} />
-                  </div>
-                  {r.followup && (
-                    <div className="phone-only followup">
-                      <div className="user-row">
-                        <div className="bubble user">{r.followup.ask}</div>
-                      </div>
-                      <div className="bubble assistant answer-bubble">
-                        <AnswerText segments={r.followup.answer} onCopy={noteCopy} />
-                      </div>
-                    </div>
-                  )}
-                  <div className="copy-note" aria-live="polite">
-                    {copyNote}
-                  </div>
-                </div>
-              )}
-
-              {messages === null && demoState === "unknown" && (
-                <div className="unknown-note">
-                  This mockup only knows the three sample questions. In the real app, anything you type is sent to the
-                  model.
-                </div>
-              )}
-
-              {messages === null && demoState === "offline" && (
+              {messages === null && showOffline && (
                 <div className="offline-card">
-                  <h1>PocketAI is not running on this computer</h1>
-                  <p>
-                    This page talks to a small server on your own machine, and it did not answer. Start it, then send
-                    your message again.
-                  </p>
-                  <code className="mono offline-cmd">python server/app.py</code>
-                  <p className="offline-more">Have not installed it yet? The home page has the one command install.</p>
+                  {hosted ? (
+                    <>
+                      <h1>The hosted PocketAI demo isn't responding</h1>
+                      <p>It may be waking up. Wait a few seconds, then send your message again.</p>
+                    </>
+                  ) : (
+                    <>
+                      <h1>PocketAI is not running on this computer</h1>
+                      <p>
+                        This page talks to a small server on your own machine, and it did not answer. Start it, then
+                        send your message again.
+                      </p>
+                      <code className="mono offline-cmd">python3 server/app.py</code>
+                      <p className="offline-more">Have not installed it yet? The home page has the one command install.</p>
+                    </>
+                  )}
                 </div>
               )}
 
-              {/* ── Live thread ───────────────────────────────────────── */}
               {messages !== null &&
                 messages.map((m, i) =>
-                  m.role === "user" ? (
+                  m.role === "error" ? (
+                    <div key={i} className="unknown-note">
+                      {m.content}
+                    </div>
+                  ) : m.role === "user" ? (
                     <div key={i} className="user-row">
                       {editingIdx === i ? (
                         <div className="edit-wrap">
@@ -454,6 +384,11 @@ export default function Chat({ onBack, modelId }) {
                     </div>
                   )
                 )}
+              {messages !== null && copyNote && (
+                <div className="copy-note" aria-live="polite">
+                  {copyNote}
+                </div>
+              )}
             </div>
 
             <div className="composer-wrap">
@@ -468,7 +403,7 @@ export default function Chat({ onBack, modelId }) {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      send();
+                      submit();
                     }
                   }}
                 />
@@ -485,7 +420,7 @@ export default function Chat({ onBack, modelId }) {
                     <span className="stop-square" />
                   </button>
                 ) : (
-                  <button type="button" className="send-btn" aria-label="Send" onClick={send}>
+                  <button type="button" className="send-btn" aria-label="Send" onClick={() => submit()}>
                     <SendIcon />
                   </button>
                 )}

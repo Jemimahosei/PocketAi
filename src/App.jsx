@@ -50,6 +50,13 @@ export default function App() {
       ? storedModel
       : serverInfo?.default_backend || storedModel || "llama";
 
+  // The home page's install tabs follow the visitor's own pick, never the
+  // availability adjustment above: installing Llama on your own computer
+  // has nothing to do with what this server can serve. Feeding the tabs
+  // modelId instead made the Llama tab unselectable on the hosted site —
+  // every click snapped straight back to Claude.
+  const installModelId = storedModel || "llama";
+
   const pickModel = (id) => {
     setStoredModel(id);
     try {
@@ -77,6 +84,6 @@ export default function App() {
       serverDown={serverDown}
     />
   ) : (
-    <Home onOpenChat={openChat} modelId={modelId} onPickModel={pickModel} />
+    <Home onOpenChat={openChat} modelId={installModelId} onPickModel={pickModel} />
   );
 }

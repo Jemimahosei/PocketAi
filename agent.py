@@ -81,7 +81,9 @@ SYSTEM_PROMPT = (
     "Be concise and direct. Use markdown formatting in your responses. "
     "Use read_pdf for PDF files and read_file for plain text files. "
     "When asked about files, look in ~/Downloads, ~/Desktop, ~/Documents, and ~ by default; "
-    "if a folder does not exist or a file is not in the first place you look, keep trying the other default folders before giving up."
+    "if a folder does not exist or a file is not in the first place you look, keep trying the other default folders before giving up. "
+    "For questions about the user's own files, use the file tools — never search_web; search_web is only for facts about the outside world. "
+    "When a file you found likely answers the question, read it and answer from its contents."
 )
 
 # ── Tool schemas (what we tell Claude it can call) ────────────────────────────
@@ -310,6 +312,7 @@ def chat_llama(user_message: str, conversation_history: list) -> tuple[str, list
     messages = ollama_backend.to_ollama_messages(SYSTEM_PROMPT, conversation_history)
     messages.append({"role": "user", "content": user_message})
 
+    nudged = False
     try:
         for _round in range(ollama_backend.MAX_TOOL_ROUNDS):
             full_text = ""
@@ -322,6 +325,16 @@ def chat_llama(user_message: str, conversation_history: list) -> tuple[str, list
                     pending_calls.extend(tool_calls)
 
             if not pending_calls:
+                # Same recovery as the web chat: a call written as text
+                # gets one correction round instead of ending the turn.
+                text_call = (None if nudged else ollama_backend.find_text_tool_call(
+                    full_text, TOOL_FUNCTIONS))
+                if text_call is not None:
+                    nudged = True
+                    messages.append({"role": "assistant", "content": full_text})
+                    messages.append({"role": "user", "content":
+                                     ollama_backend.text_call_nudge(text_call[0])})
+                    continue
                 conversation_history.append({"role": "user", "content": user_message})
                 conversation_history.append({"role": "assistant", "content": full_text})
                 return full_text, conversation_history

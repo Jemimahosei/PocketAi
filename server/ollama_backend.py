@@ -169,6 +169,42 @@ def stream_ollama_chat(host: str, model: str, messages: list, tools: list):
 
 # ── The agentic loop (SSE) ───────────────────────────────────────────────────
 
+def find_text_tool_call(text, known_tools):
+    """Detects a tool call the model wrote as plain-text JSON instead of
+    using the tool-calling format — something small local models do after
+    a few rounds, which would otherwise end the turn with the raw JSON
+    shown to the user as if it were the answer. Returns (name, args) for
+    the first JSON object in the text that names a known tool, else None.
+    """
+    if not text:
+        return None
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            obj, _end = decoder.raw_decode(text[i:])
+        except Exception:
+            continue
+        if isinstance(obj, dict) and obj.get("name") in known_tools:
+            args = (obj.get("parameters") or obj.get("arguments")
+                    or obj.get("input") or {})
+            return obj["name"], args if isinstance(args, dict) else {}
+    return None
+
+
+def text_call_nudge(name: str) -> str:
+    """The correction fed back when find_text_tool_call fires."""
+    return (
+        f"You wrote that {name} call as plain text, which does not run "
+        "it. Call the tool now, using the tool-calling format — do not "
+        "write the call out as JSON text. Use the argument names from "
+        "the tool's definition: for read_file and read_pdf the argument "
+        "is called 'path' and must be the full path to the file, "
+        "including its folder."
+    )
+
+
 def _sse(event: str, data: dict) -> str:
     """Formats a Server-Sent Event string (same shape as app.py)."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
@@ -192,6 +228,7 @@ def run_llama_chat(host: str, model: str, system_prompt: str,
     messages.append({"role": "user", "content": user_message})
     done_history = list(plain_history) + [{"role": "user", "content": user_message}]
 
+    nudged = False
     try:
         for _round in range(MAX_TOOL_ROUNDS):
             full_text = ""
@@ -203,6 +240,17 @@ def run_llama_chat(host: str, model: str, system_prompt: str,
                 pending_calls.extend(tool_calls)
 
             if not pending_calls:
+                # A call written as text instead of in tool format gets
+                # one correction round rather than ending the turn with
+                # raw JSON as the "answer".
+                text_call = (None if nudged else
+                             find_text_tool_call(full_text, tool_functions))
+                if text_call is not None:
+                    nudged = True
+                    messages.append({"role": "assistant", "content": full_text})
+                    messages.append({"role": "user",
+                                     "content": text_call_nudge(text_call[0])})
+                    continue
                 # Final answer — mirror the Claude path's done event.
                 done_history.append({"role": "assistant", "content": full_text})
                 yield _sse("done", {"history": done_history})

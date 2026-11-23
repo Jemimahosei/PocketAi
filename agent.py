@@ -73,7 +73,7 @@ if CLAUDE_AVAILABLE:
     )
 console = Console()
 
-# Load agent name from ~/.jemi/config.json (runs first-run setup if needed)
+# Load agent name from ~/.pocketai/config.json if one exists (never prompts)
 AGENT_NAME = get_agent_name(fallback=AGENT_NAME)
 
 SYSTEM_PROMPT = (

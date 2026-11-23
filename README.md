@@ -1,6 +1,6 @@
 # PocketAI
 
-*Not yet deployed — local only.*
+**Live:** https://pocketai-yiai.onrender.com
 
 A local AI assistant that answers questions about your own files. Two frontends over one agentic loop: a terminal CLI and a React web UI, both backed by a Flask server that calls the Claude API. Claude can read files and PDFs, list directories, and search the web, then answer from what it found.
 

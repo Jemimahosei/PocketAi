@@ -37,7 +37,17 @@ python3 server/app.py            # browser chat at http://localhost:5001
 python3 agent.py                 # or the terminal chat
 ```
 
-`config.py` is gitignored. Settings can also come from environment variables (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `POCKETAI_BACKEND`, `OLLAMA_HOST`, `OLLAMA_MODEL`). The default Claude model is `claude-sonnet-5`. The agent name can also be saved in `~/.jemi/config.json`.
+`config.py` is gitignored. Settings can also come from environment variables (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `POCKETAI_BACKEND`, `OLLAMA_HOST`, `OLLAMA_MODEL`). The default Claude model is `claude-sonnet-5`. The agent name can also be saved in `~/.pocketai/config.json`.
+
+## Uninstall
+
+Delete the folder and the settings folder — that's everything:
+
+```bash
+rm -rf ~/PocketAi ~/.pocketai
+```
+
+If you installed the free version, Ollama and the downloaded Llama model stay behind (other apps may use them); `ollama rm llama3.2` removes the model.
 
 ## The hosted demo
 
@@ -59,8 +69,8 @@ Browser chat (React + Vite) ───┘        │
 
 - **Backend** (`server/app.py`): `POST /chat` runs the agentic loop for the chosen backend and streams token, tool_call, tool_result, and done events over SSE; `GET /agent-name` reports the agent name, which backends can actually serve right now, and whether the file tools are on. On a deployed server it also serves the built frontend from `dist/`.
 - **Frontend** (`src/`): React + Vite — live token streaming, collapsible tool calls, message edit-and-resend, voice input (Web Speech API), a "files it opened" sidebar, and the model switch. In development it talks to the backend at `http://localhost:5001` (Vite dev server on port 5173).
-- **Tools** (`tools/`): file and PDF reading (PyMuPDF), directory listing, and DuckDuckGo web search, shared by both interfaces and both models.
+- **Tools** (`tools/`): file and PDF reading (pypdf — deliberately light; the previous PDF library dragged in a ~180 MB machine-learning runtime for basic text extraction), directory listing, and DuckDuckGo web search, shared by both interfaces and both models.
 
 ## Stack
 
-Python · Flask · Anthropic Claude API · Ollama (Llama 3.2) · React 19 · Vite · PyMuPDF · DuckDuckGo
+Python · Flask · Anthropic Claude API · Ollama (Llama 3.2) · React 19 · Vite · pypdf · DuckDuckGo

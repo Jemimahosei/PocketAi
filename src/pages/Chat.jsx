@@ -5,6 +5,10 @@ import { Logo, MicIcon, SendIcon, ToolStep, AnswerText } from "../components/ui"
 
 export default function Chat({ onBack, modelId, onPickModel, serverInfo, serverDown }) {
   const model = INSTALLS.find((i) => i.id === modelId) || INSTALLS[0];
+  // Voice input uses the browser's Web Speech API (Chrome and Safari
+  // only). Where it doesn't exist, the mic button is not shown at
+  // all instead of sitting there dead.
+  const micSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   const agentName = serverInfo?.name || "PocketAI";
   const hosted = serverInfo?.environment === "hosted";
   const fileTools = serverInfo?.file_tools !== false;
@@ -258,7 +262,7 @@ export default function Chat({ onBack, modelId, onPickModel, serverInfo, serverD
                   <h1>What should I look up?</h1>
                   <p>
                     {hosted
-                      ? "Ask me anything, or ask about the web. This hosted demo can't open files on your computer — file access works in the free local install."
+                      ? "Ask me anything, or ask about the web. This hosted demo can't open files on your computer — file access works in the free local install. The demo also sleeps when idle, so the first reply can take up to a minute to wake it."
                       : "Ask about a file, a folder, or anything on the web. I will say which tool I am using."}
                   </p>
                   <div className="chips">
@@ -407,14 +411,16 @@ export default function Chat({ onBack, modelId, onPickModel, serverInfo, serverD
                     }
                   }}
                 />
-                <button
-                  type="button"
-                  className={`icon-btn${listening ? " listening" : ""}`}
-                  aria-label="Speak your message"
-                  onClick={toggleMic}
-                >
-                  <MicIcon />
-                </button>
+                {micSupported && (
+                  <button
+                    type="button"
+                    className={`icon-btn${listening ? " listening" : ""}`}
+                    aria-label="Speak your message"
+                    onClick={toggleMic}
+                  >
+                    <MicIcon />
+                  </button>
+                )}
                 {loading ? (
                   <button type="button" className="send-btn stop" aria-label="Stop" onClick={stop}>
                     <span className="stop-square" />

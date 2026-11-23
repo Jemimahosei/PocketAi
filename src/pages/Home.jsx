@@ -118,8 +118,8 @@ export default function Home({ onOpenChat, modelId, onPickModel }) {
         <section id="install" className="section">
           <h2>Install it in one command</h2>
           <p className="section-sub">
-            <span className="phone-hide">Needs a Mac or Linux terminal. Pick the model that does the thinking.</span>
-            <span className="phone-only">Run it in a Mac or Linux terminal. Pick the model that does the thinking.</span>
+            <span className="phone-hide">Needs a Mac or Linux terminal with git, python3 and curl — no Windows version yet. Pick the model that does the thinking.</span>
+            <span className="phone-only">Mac or Linux, with git, python3 and curl. Pick the model that does the thinking.</span>
           </p>
           <FolderTabs
             tabs={INSTALLS}

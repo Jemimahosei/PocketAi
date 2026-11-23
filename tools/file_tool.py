@@ -54,8 +54,26 @@ def list_directory(path: str = ".") -> str:
         result += "\n".join(dirs + files)
         return result
     except FileNotFoundError:
+        # Ground truth beats guessing: say which of the standard folders
+        # DO exist and what the home folder holds, so the next step is
+        # obvious instead of another blind try.
+        home = os.path.expanduser("~")
+        existing = [name for name in ("Desktop", "Downloads", "Documents")
+                    if os.path.isdir(os.path.join(home, name))]
+        try:
+            home_items = sorted(os.listdir(home))
+            home_items = [i for i in home_items if not i.startswith(".")]
+        except Exception:
+            home_items = []
+        detail = ""
+        if existing:
+            detail += (" Folders that do exist: "
+                       + ", ".join(f"~/{name}" for name in existing) + ".")
+        if home_items:
+            detail += (" The home folder ~ contains: "
+                       + ", ".join(home_items[:20]) + ".")
         return (f"Error: Directory '{path}' not found. It may simply not "
-                f"exist on this computer — try another folder (~/Desktop, "
-                f"~/Downloads, ~/Documents, or ~) before giving up.")
+                f"exist on this computer — try another folder before "
+                f"giving up.{detail}")
     except Exception as e:
         return f"Error listing directory: {str(e)}"

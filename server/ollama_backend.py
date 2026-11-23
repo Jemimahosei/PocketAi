@@ -138,6 +138,11 @@ def stream_ollama_chat(host: str, model: str, messages: list, tools: list):
         "messages": messages,
         "tools": tools,
         "stream": True,
+        # Ollama's default temperature (0.8) is tuned for creative chat;
+        # an agent deciding tool calls does better cooler — at 0.8 the
+        # 3B model sometimes narrates the next tool result instead of
+        # calling the tool. 0.3 keeps wording natural but steadier.
+        "options": {"temperature": 0.3},
     }
     with _request(host, "/api/chat", payload, CHAT_TIMEOUT) as resp:
         for line in resp:

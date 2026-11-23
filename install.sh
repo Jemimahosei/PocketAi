@@ -16,7 +16,22 @@ fi
 if ! command -v ollama &> /dev/null; then
   curl -fsSL https://ollama.ai/install.sh | sh
 fi
-ollama pull llama3.2
+if command -v ollama &> /dev/null; then
+  if ! ollama pull llama3.2; then
+    # A fresh install can leave the Ollama service not yet running;
+    # start it and try the download once more before giving up.
+    (ollama serve >/dev/null 2>&1 &)
+    sleep 3
+    ollama pull llama3.2
+  fi
+else
+  echo ""
+  echo "Ollama did not install — see its message above (on Linux it may"
+  echo "need the zstd package first: sudo apt-get install zstd)."
+  echo "PocketAI will still start, but the free Llama model cannot answer"
+  echo "until Ollama is installed. The Claude installer is the other option."
+  echo ""
+fi
 
 # Get or update the code. Re-running the installer must not fail just
 # because a file in the folder changed: tracked app files are

@@ -12,6 +12,14 @@ def read_file(path: str) -> str:
     """
     try:
         full_path = os.path.expanduser(path)
+        if full_path.lower().endswith('.pdf'):
+            # PDFs are binary — hand off to the PDF extractor instead of
+            # failing with a UTF-8 decode error.
+            try:
+                from tools.pdf_tool import read_pdf
+            except ImportError:
+                from pdf_tool import read_pdf
+            return read_pdf(path)
         with open(full_path, 'r', encoding='utf-8') as f:
             contents = f.read()
         return f"File contents of '{path}':\n\n{contents}"

@@ -35,6 +35,7 @@ except ModuleNotFoundError:
     sys.exit(1)
 from config_manager import get_agent_name
 from tools.file_tool import read_file, list_directory
+from tools.pdf_tool import read_pdf
 from tools.search_tool import search_web
 
 # ── Client & UI setup ────────────────────────────────────────────────────────
@@ -84,6 +85,20 @@ TOOL_SCHEMAS = [
         }
     },
     {
+        "name": "read_pdf",
+        "description": "Read the text contents of a PDF file from the local filesystem.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to the PDF file to read."
+                }
+            },
+            "required": ["path"]
+        }
+    },
+    {
         "name": "search_web",
         "description": "Search the web using DuckDuckGo and return relevant results.",
         "input_schema": {
@@ -103,6 +118,7 @@ TOOL_SCHEMAS = [
 TOOL_FUNCTIONS = {
     "read_file": read_file,
     "list_directory": list_directory,
+    "read_pdf": read_pdf,
     "search_web": search_web,
 }
 
@@ -186,7 +202,8 @@ def chat(user_message: str, conversation_history: list) -> tuple[str, list]:
                 max_tokens=MAX_TOKENS,
                 system=(
                     f"You are {AGENT_NAME}, a helpful AI assistant running in the terminal. "
-                    "Be concise and direct. Use markdown formatting in your responses."
+                    "Be concise and direct. Use markdown formatting in your responses. "
+                    "Use read_pdf for PDF files and read_file for plain text files."
                 ),
                 tools=TOOL_SCHEMAS,
                 messages=conversation_history,

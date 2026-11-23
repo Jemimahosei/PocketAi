@@ -12,6 +12,8 @@ def read_pdf(path: str) -> str:
         doc.close()
         if not text.strip():
             return f"Error: No readable text found in '{path}' (may be scanned/image-only)."
-        return f"Contents of '{path}':\n\n{text[:8000]}"
+        if len(text) > 30000:
+            text = text[:30000] + "\n… (document truncated here)"
+        return f"Contents of '{path}':\n\n{text}"
     except Exception as e:
         return f"Error reading PDF: {str(e)}"

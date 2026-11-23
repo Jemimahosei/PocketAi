@@ -26,7 +26,7 @@ import json
 # subdirectory.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, request, Response, stream_with_context
+from flask import Flask, request, Response, send_from_directory, stream_with_context
 from flask_cors import CORS
 
 from config_manager import get_agent_name
@@ -97,8 +97,15 @@ def get_claude_client():
     if _claude_client is None:
         if not ANTHROPIC_API_KEY or not MODEL:
             return None
-        from anthropic import Anthropic
-        _claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        try:
+            from anthropic import Anthropic
+            _claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        except Exception:
+            # A client that cannot even be constructed (bad env,
+            # proxy or SDK surprise) means "Claude not configured"
+            # for routing purposes — callers answer with the honest
+            # 503 instead of a 500.
+            return None
     return _claude_client
 
 
@@ -265,6 +272,15 @@ def chat():
 
     backend = select_backend(body)
 
+    # A deployed server has no local Ollama to start: when the picked
+    # Llama backend cannot serve but Claude is configured, serve with
+    # Claude instead of failing — a visitor cannot start Ollama on a
+    # machine they don't own. On a personal install Ollama is running,
+    # so this never triggers and Llama stays the default there.
+    if backend == "llama" and not ollama_available(OLLAMA_HOST) \
+            and get_claude_client() is not None:
+        backend = "claude"
+
     # Fail fast and honestly, before streaming starts, when the chosen
     # backend cannot serve — the frontend turns a non-200 here into its
     # "PocketAI is not running on this computer" state.
@@ -320,6 +336,27 @@ def agent_name():
             "claude": {"model": MODEL, "configured": bool(ANTHROPIC_API_KEY)},
         },
     }
+
+# ── Built frontend (deployed servers) ───────────────────────────────
+# A deployed server also serves the Vite build in ../dist, so the
+# site and its API share one origin. Locally that folder may not
+# exist — the Vite dev server serves the UI there instead, and these
+# routes just 404. The API routes above are more specific and always
+# win over this catch-all.
+DIST_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dist"
+)
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path):
+    if path and os.path.isfile(os.path.join(DIST_DIR, path)):
+        return send_from_directory(DIST_DIR, path)
+    if os.path.isfile(os.path.join(DIST_DIR, "index.html")):
+        return send_from_directory(DIST_DIR, "index.html")
+    return {"error": "Frontend not built"}, 404
+
 
 if __name__ == "__main__":
     print(f"Starting PocketAI server — agent name: {AGENT_NAME}")

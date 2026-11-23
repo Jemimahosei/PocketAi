@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: pocketai
+    env: docker
+    plan: free
+    envVars:
+      # No Ollama exists on a server, so the deployed default is
+      # Claude; app.py also falls back to Claude per-request when a
+      # visitor's pick (Llama) cannot serve but Claude is configured.
+      - key: POCKETAI_BACKEND
+        value: claude
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
+      # Set in the Render dashboard at creation — never in git.
+      - key: ANTHROPIC_API_KEY
+        sync: false

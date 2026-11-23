@@ -129,4 +129,7 @@ export const TOOLS = [
 ];
 
 export const GITHUB_URL = "https://github.com/Jemimahosei/PocketAi";
-export const SERVER_URL = "http://localhost:5001";
+// Local dev: the Vite server (5173) talks to Flask on 5001.
+// Production build: the Flask server serves this app itself, so the
+// API is same-origin and the base URL is empty.
+export const SERVER_URL = import.meta.env.DEV ? "http://localhost:5001" : "";

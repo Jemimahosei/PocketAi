@@ -99,7 +99,13 @@ def get_claude_client():
             return None
         try:
             from anthropic import Anthropic
-            _claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+            # Never advertise brotli ("br"): some machines ship a brotli
+            # build whose Decompressor lacks the output_buffer_limit
+            # argument httpx2 passes, crashing Claude replies.
+            _claude_client = Anthropic(
+                api_key=ANTHROPIC_API_KEY,
+                default_headers={"Accept-Encoding": "gzip, deflate"},
+            )
         except Exception:
             # A client that cannot even be constructed (bad env,
             # proxy or SDK surprise) means "Claude not configured"

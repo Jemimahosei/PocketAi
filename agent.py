@@ -6,6 +6,12 @@ and displays results with a rich terminal UI.
 """
 
 import sys
+
+try:
+    import readline  # noqa: F401 — arrow keys / line editing at the prompt
+except ImportError:
+    pass
+
 from anthropic import Anthropic
 from rich.console import Console
 from rich.panel import Panel
@@ -33,7 +39,13 @@ from tools.search_tool import search_web
 
 # ── Client & UI setup ────────────────────────────────────────────────────────
 
-client = Anthropic(api_key=ANTHROPIC_API_KEY)
+# Never advertise brotli ("br"): some machines ship a brotli build whose
+# Decompressor lacks the output_buffer_limit argument httpx2 passes, which
+# crashed every Claude reply with a TypeError surfaced as "Connection error".
+client = Anthropic(
+    api_key=ANTHROPIC_API_KEY,
+    default_headers={"Accept-Encoding": "gzip, deflate"},
+)
 console = Console()
 
 # Load agent name from ~/.jemi/config.json (runs first-run setup if needed)

@@ -1,15 +1,16 @@
-import fitz  # pymupdf
 import os
 
+from pypdf import PdfReader
+
+
 def read_pdf(path: str) -> str:
-    """Read text content from a PDF or DOCX file."""
+    """Read text content from a PDF file."""
     try:
         full_path = os.path.expanduser(path)
-        doc = fitz.open(full_path)
+        reader = PdfReader(full_path)
         text = ""
-        for page in doc:
-            text += page.get_text()
-        doc.close()
+        for page in reader.pages:
+            text += (page.extract_text() or "") + "\n"
         if not text.strip():
             return f"Error: No readable text found in '{path}' (may be scanned/image-only)."
         if len(text) > 30000:

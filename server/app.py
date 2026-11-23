@@ -342,12 +342,22 @@ def chat():
     # backend cannot serve — the frontend turns a non-200 here into its
     # "PocketAI is not running on this computer" state.
     if backend == "llama" and not ollama_available(OLLAMA_HOST):
+        if HOSTED:
+            return {
+                "error": "Llama runs on your own computer, so it isn't "
+                         "part of this hosted demo. Claude answers here; "
+                         "the free local install includes Llama."
+            }, 503
         return {
             "error": "PocketAI's local model (Ollama) is not running on "
                      "this computer. Start Ollama, then send your "
                      "message again."
         }, 503
     if backend == "claude" and get_claude_client() is None:
+        if HOSTED:
+            return {
+                "error": "Claude isn't available on this demo right now."
+            }, 503
         return {
             "error": "Claude is not set up on this computer (no "
                      "Anthropic API key). Switch to Llama, or add your "

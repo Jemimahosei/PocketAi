@@ -36,8 +36,23 @@ else
   git clone https://github.com/Jemimahosei/PocketAi.git ~/PocketAi && cd ~/PocketAi
 fi
 
-pip3 install -r requirements.txt
+# Install the Python packages into PocketAI's own virtual environment.
+# Installing into the system Python is refused outright by modern
+# setups (Homebrew Python, Debian/Ubuntu — PEP 668), which used to
+# leave new users with a server that crashed on missing packages.
+if [ ! -x .venv/bin/python ]; then
+  if ! python3 -m venv .venv; then
+    echo "PocketAI needs Python's venv module to set up its own environment."
+    echo "On Ubuntu/Debian: sudo apt install python3-venv — then run this command again."
+    exit 1
+  fi
+fi
+if ! .venv/bin/pip install -r requirements.txt; then
+  echo "Installing PocketAI's Python packages failed — see the messages above."
+  echo "PocketAI isn't installed yet; fix that and run this command again."
+  exit 1
+fi
 echo "Starting PocketAI. Your browser chat opens at http://localhost:5001"
 echo "Leave this window open while you use PocketAI; press Ctrl+C to stop it."
 (sleep 3; open http://localhost:5001 2>/dev/null || xdg-open http://localhost:5001 2>/dev/null) &
-python3 server/app.py
+.venv/bin/python server/app.py

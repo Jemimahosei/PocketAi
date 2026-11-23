@@ -25,16 +25,19 @@ Installs Ollama if needed, downloads Llama 3.2, installs the Python packages, th
 curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install-claude.sh -o /tmp/pocketai-install-claude.sh && bash /tmp/pocketai-install-claude.sh
 ```
 
-Asks for an Anthropic API key once, saves it in `config.py` on your computer, then starts PocketAI the same way. Prefer the terminal? Either install also gives you `python3 agent.py`.
+Asks for an Anthropic API key once, saves it in `config.py` on your computer, then starts PocketAI the same way. Prefer the terminal? Either install also gives you the terminal chat (`.venv/bin/python agent.py`).
+
+Both installers put the Python packages in a `.venv` folder inside PocketAi — modern Pythons (Homebrew, Debian/Ubuntu) refuse to install into the system Python, and this keeps PocketAI's packages separate from everything else.
 
 ## Run it manually
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ollama pull llama3.2             # for the free local model
 cp config.example.py config.py   # optional — only for Claude; add your API key
-python3 server/app.py            # browser chat at http://localhost:5001
-python3 agent.py                 # or the terminal chat
+.venv/bin/python server/app.py   # browser chat at http://localhost:5001
+.venv/bin/python agent.py        # or the terminal chat
 ```
 
 `config.py` is gitignored. Settings can also come from environment variables (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `POCKETAI_BACKEND`, `OLLAMA_HOST`, `OLLAMA_MODEL`). The default Claude model is `claude-sonnet-5`. The agent name can also be saved in `~/.pocketai/config.json`.

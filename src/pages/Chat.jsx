@@ -100,6 +100,7 @@ export default function Chat({ onBack, modelId }) {
       try {
         await streamChat({
           message: text,
+          model: modelId,
           history,
           signal: controller.signal,
           onToken: (t) => {
@@ -128,7 +129,7 @@ export default function Chat({ onBack, modelId }) {
       setLoading(false);
       inputRef.current?.focus();
     },
-    []
+    [modelId]
   );
 
   const send = () => {

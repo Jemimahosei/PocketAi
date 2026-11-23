@@ -313,7 +313,7 @@ def chat_llama(user_message: str, conversation_history: list) -> tuple[str, list
     messages = ollama_backend.to_ollama_messages(SYSTEM_PROMPT, conversation_history)
     messages.append({"role": "user", "content": user_message})
 
-    nudged = False
+    nudges = 0
     try:
         for _round in range(ollama_backend.MAX_TOOL_ROUNDS):
             full_text = ""
@@ -327,14 +327,14 @@ def chat_llama(user_message: str, conversation_history: list) -> tuple[str, list
 
             if not pending_calls:
                 # Same recovery as the web chat: a call written as text
-                # gets one correction round instead of ending the turn.
-                text_call = (None if nudged else ollama_backend.find_text_tool_call(
-                    full_text, TOOL_FUNCTIONS))
+                # gets a correction round instead of ending the turn.
+                text_call = (ollama_backend.find_text_tool_call(full_text, TOOL_FUNCTIONS)
+                             if nudges < 3 else None)
                 if text_call is not None:
-                    nudged = True
+                    nudges += 1
                     messages.append({"role": "assistant", "content": full_text})
                     messages.append({"role": "user", "content":
-                                     ollama_backend.text_call_nudge(text_call[0])})
+                                     ollama_backend.text_call_nudge(text_call[0], text_call[1])})
                     continue
                 conversation_history.append({"role": "user", "content": user_message})
                 conversation_history.append({"role": "assistant", "content": full_text})

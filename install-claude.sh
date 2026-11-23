@@ -13,4 +13,8 @@ MODEL = "claude-sonnet-5"
 AGENT_NAME = "PocketAI"
 MAX_TOKENS = 1024
 EOF
-python3 agent.py
+echo "Starting PocketAI. Your browser chat opens at http://localhost:5001"
+echo "Leave this window open while you use PocketAI; press Ctrl+C to stop it."
+echo "Prefer the terminal? Stop this and run: python3 agent.py"
+(sleep 3; open http://localhost:5001 2>/dev/null || xdg-open http://localhost:5001 2>/dev/null) &
+POCKETAI_BACKEND=claude python3 server/app.py

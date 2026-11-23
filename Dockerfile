@@ -2,7 +2,7 @@
 # Stage 1: build the Vite frontend.
 FROM node:22-slim AS web
 WORKDIR /web
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY index.html vite.config.js ./
 COPY src ./src

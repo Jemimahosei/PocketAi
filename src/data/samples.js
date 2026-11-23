@@ -102,7 +102,7 @@ export const INSTALLS = [
   {
     id: "llama",
     name: "Free, with Llama",
-    cmd: "curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install.sh | bash",
+    cmd: "curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install.sh -o /tmp/pocketai-install.sh && bash /tmp/pocketai-install.sh",
     blurb:
       "Installs Ollama if you do not have it, downloads the Llama 3.2 model, then starts PocketAI. No account and no API key.",
     privacy: "Nothing leaves your computer. The model runs on your machine.",
@@ -112,7 +112,7 @@ export const INSTALLS = [
   {
     id: "claude",
     name: "Smarter, with Claude",
-    cmd: "curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install-claude.sh | bash",
+    cmd: "curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install-claude.sh -o /tmp/pocketai-install-claude.sh && bash /tmp/pocketai-install-claude.sh",
     blurb:
       "Asks for an Anthropic API key once, saves it on your computer, then starts PocketAI. Answers are sharper on long documents.",
     privacy: "The text of files you ask about is sent to Anthropic to answer your question. Nothing else is.",

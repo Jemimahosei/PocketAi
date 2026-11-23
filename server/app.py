@@ -73,15 +73,35 @@ DEFAULT_BACKEND = str(
 if DEFAULT_BACKEND not in ("llama", "claude"):
     DEFAULT_BACKEND = "llama"
 
+# ── Hosted mode: file tools off ─────────────────────────────────────────────
+#
+# On a hosted server (e.g. Render) the file tools would read the
+# SERVER's filesystem — including the environment the API key lives
+# in — for any visitor who asks. So when this process runs on a host
+# (Render sets RENDER) or POCKETAI_FILE_TOOLS=off, the file tools are
+# not offered to either backend at all; only web search remains.
+# Locally they stay on: reading the owner's own files is the point.
+HOSTED = "RENDER" in os.environ
+_file_tools_env = str(os.environ.get("POCKETAI_FILE_TOOLS", "")).lower()
+FILE_TOOLS_ENABLED = _file_tools_env not in ("off", "0", "false", "no") and not HOSTED
+
 app = Flask(__name__)
 CORS(app)  # Allow React dev server (port 5173) to talk to Flask (port 5001)
 
 AGENT_NAME = get_agent_name(fallback=_config_agent_name)
 
-SYSTEM_PROMPT = (
-    f"You are {AGENT_NAME}, a helpful AI assistant running locally on the user's Mac. When asked about files, look in ~/Downloads, ~/Desktop, ~/Documents, and ~ by default. Use read_pdf for .pdf files, read_file for text files, list_directory to explore folders. "
-    "Be concise and direct. Use markdown formatting."
-)
+if FILE_TOOLS_ENABLED:
+    SYSTEM_PROMPT = (
+        f"You are {AGENT_NAME}, a helpful AI assistant running locally on the user's Mac. When asked about files, look in ~/Downloads, ~/Desktop, ~/Documents, and ~ by default. Use read_pdf for .pdf files, read_file for text files, list_directory to explore folders. "
+        "Be concise and direct. Use markdown formatting."
+    )
+else:
+    SYSTEM_PROMPT = (
+        f"You are {AGENT_NAME}, a helpful AI assistant on the PocketAI website. "
+        "You are running on a hosted demo server, NOT on the visitor's computer, and you cannot access their files — the file tools are disabled here. "
+        "If a visitor asks about files or folders on their own computer, explain that file access only works in the free local install (linked from the home page), where PocketAI runs on their own machine. "
+        "Be concise and direct. Use markdown formatting."
+    )
 
 # ── Claude client (lazy) ─────────────────────────────────────────────────────
 #
@@ -171,6 +191,19 @@ TOOL_FUNCTIONS = {
     "read_pdf": read_pdf,
 }
 
+# The tool set actually offered to the models. On a hosted server the
+# file tools are withheld entirely (see FILE_TOOLS_ENABLED above), so
+# no prompt can talk the model into reading the server's files.
+FILE_TOOL_NAMES = ("read_file", "list_directory", "read_pdf")
+if FILE_TOOLS_ENABLED:
+    ACTIVE_TOOL_SCHEMAS = TOOL_SCHEMAS
+    ACTIVE_TOOL_FUNCTIONS = TOOL_FUNCTIONS
+else:
+    ACTIVE_TOOL_SCHEMAS = [s for s in TOOL_SCHEMAS if s["name"] not in FILE_TOOL_NAMES]
+    ACTIVE_TOOL_FUNCTIONS = {
+        k: v for k, v in TOOL_FUNCTIONS.items() if k not in FILE_TOOL_NAMES
+    }
+
 # ── SSE helper ────────────────────────────────────────────────────────────────
 
 def sse_event(event: str, data: dict) -> str:
@@ -194,6 +227,28 @@ def select_backend(body: dict) -> str:
 
 # ── Claude loop (unchanged behaviour, extracted) ──────────────────────────────
 
+def _friendly_claude_error(e: Exception) -> str:
+    """Short, user-readable version of an Anthropic API failure —
+    never the raw error dump (a wrong key used to surface the whole
+    401 JSON body to the visitor)."""
+    status = getattr(e, "status_code", None)
+    kind = type(e).__name__
+    if status == 401 or kind == "AuthenticationError":
+        return ("Your Anthropic API key was rejected. Check the key "
+                "(config.py on a local install, or the server's "
+                "ANTHROPIC_API_KEY setting) and try again.")
+    if kind == "APIConnectionError":
+        return ("PocketAI could not reach Claude just now. Check the "
+                "internet connection and try again.")
+    if status == 404:
+        return (f"The configured Claude model ({MODEL}) was not found "
+                "for this API key. Check the model name in the settings.")
+    if status == 429:
+        return ("Claude is rate-limiting this key right now. Wait a "
+                "moment and try again.")
+    return "Claude could not answer just now. Try again in a moment."
+
+
 def generate_claude(conversation_history: list, user_message: str):
     client = get_claude_client()
     history = conversation_history + [{"role": "user", "content": user_message}]
@@ -204,12 +259,12 @@ def generate_claude(conversation_history: list, user_message: str):
                 model=MODEL,
                 max_tokens=MAX_TOKENS,
                 system=SYSTEM_PROMPT,
-                tools=TOOL_SCHEMAS,
+                tools=ACTIVE_TOOL_SCHEMAS,
                 messages=history,
             )
         except Exception as e:
             # Clean message for the UI — never leak a stack trace.
-            yield sse_event("error", {"message": f"Claude could not answer: {e}"})
+            yield sse_event("error", {"message": _friendly_claude_error(e)})
             return
 
         if response.stop_reason == "end_turn":
@@ -239,7 +294,7 @@ def generate_claude(conversation_history: list, user_message: str):
             for block in response.content:
                 if block.type == "tool_use":
                     yield sse_event("tool_call", {"name": block.name, "input": block.input})
-                    result = TOOL_FUNCTIONS.get(block.name, lambda **k: "Unknown tool")(**block.input)
+                    result = ACTIVE_TOOL_FUNCTIONS.get(block.name, lambda **k: "Unknown tool")(**block.input)
                     yield sse_event("tool_result", {"result": result[:500]})  # truncate for UI
                     tool_results.append({
                         "type": "tool_result",
@@ -278,14 +333,10 @@ def chat():
 
     backend = select_backend(body)
 
-    # A deployed server has no local Ollama to start: when the picked
-    # Llama backend cannot serve but Claude is configured, serve with
-    # Claude instead of failing — a visitor cannot start Ollama on a
-    # machine they don't own. On a personal install Ollama is running,
-    # so this never triggers and Llama stays the default there.
-    if backend == "llama" and not ollama_available(OLLAMA_HOST) \
-            and get_claude_client() is not None:
-        backend = "claude"
+    # No silent backend swaps: if the picked backend cannot serve, the
+    # request fails honestly below. A Llama pick must never be answered
+    # by Claude behind the user's back — the Llama option is the one
+    # that promises "nothing leaves your computer".
 
     # Fail fast and honestly, before streaming starts, when the chosen
     # backend cannot serve — the frontend turns a non-200 here into its
@@ -311,8 +362,8 @@ def chat():
                 system_prompt=SYSTEM_PROMPT,
                 plain_history=conversation_history,
                 user_message=user_message,
-                tool_schemas=TOOL_SCHEMAS,
-                tool_functions=TOOL_FUNCTIONS,
+                tool_schemas=ACTIVE_TOOL_SCHEMAS,
+                tool_functions=ACTIVE_TOOL_FUNCTIONS,
             )
         else:
             yield from generate_claude(conversation_history, user_message)
@@ -326,20 +377,46 @@ def chat():
         }
     )
 
+# Ollama liveness, cached briefly so page loads don't each pay the
+# probe timeout.
+_ollama_cache = {"at": 0.0, "ok": False}
+
+
+def _ollama_ok() -> bool:
+    import time
+
+    now = time.time()
+    if now - _ollama_cache["at"] > 5:
+        _ollama_cache["ok"] = ollama_available(OLLAMA_HOST)
+        _ollama_cache["at"] = now
+    return _ollama_cache["ok"]
+
+
 @app.route("/agent-name", methods=["GET"])
 def agent_name():
     """
     Returns the agent's name so the frontend can display it.
-    Also reports which backends this server can serve, so the UI (and
-    anyone debugging) can see the live model setup. The frontend only
-    reads "name"; the extra fields change nothing for it.
+    Also reports which backends this server can actually serve right
+    now ("available"), whether it is a hosted deployment, and whether
+    the file tools are on — the UI uses these to offer only working
+    backends and to describe the connection honestly.
     """
     return {
         "name": AGENT_NAME,
         "default_backend": DEFAULT_BACKEND,
+        "environment": "hosted" if HOSTED else "local",
+        "file_tools": FILE_TOOLS_ENABLED,
         "backends": {
-            "llama": {"model": OLLAMA_MODEL, "host": OLLAMA_HOST},
-            "claude": {"model": MODEL, "configured": bool(ANTHROPIC_API_KEY)},
+            "llama": {
+                "model": OLLAMA_MODEL,
+                "host": OLLAMA_HOST,
+                "available": _ollama_ok(),
+            },
+            "claude": {
+                "model": MODEL,
+                "configured": bool(ANTHROPIC_API_KEY),
+                "available": get_claude_client() is not None,
+            },
         },
     }
 
@@ -368,4 +445,5 @@ if __name__ == "__main__":
     print(f"Starting PocketAI server — agent name: {AGENT_NAME}")
     print(f"Default backend: {DEFAULT_BACKEND} "
           f"(llama: {OLLAMA_MODEL} at {OLLAMA_HOST}; claude: {MODEL or 'not configured'})")
+    print(f"File tools: {'on' if FILE_TOOLS_ENABLED else 'OFF (hosted mode)'}")
     app.run(port=5001, debug=True)

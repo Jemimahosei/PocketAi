@@ -5,10 +5,14 @@ services:
     plan: free
     envVars:
       # No Ollama exists on a server, so the deployed default is
-      # Claude; app.py also falls back to Claude per-request when a
-      # visitor's pick (Llama) cannot serve but Claude is configured.
+      # Claude. There is no per-request fallback: a Llama pick that
+      # cannot serve fails honestly rather than silently using Claude.
       - key: POCKETAI_BACKEND
         value: claude
+      # The hosted site must never read the server's own files.
+      # (app.py also forces this off whenever RENDER is set.)
+      - key: POCKETAI_FILE_TOOLS
+        value: off
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-5
       # Set in the Render dashboard at creation — never in git.

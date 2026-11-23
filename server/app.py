@@ -108,6 +108,44 @@ else:
         "Be concise and direct. Use markdown formatting."
     )
 
+def _home_grounding() -> str:
+    """A short, factual map of the user's home folder, appended to the
+    Llama system prompt per request. The small local model searches far
+    more reliably when it starts from the actual layout instead of
+    guessing which folders exist and what they hold — it turns a
+    multi-folder hunt into 'read the obviously relevant file'. Names
+    only; computed fresh per request; never leaves the user's machine.
+    """
+    if not FILE_TOOLS_ENABLED:
+        return ""
+
+    def names(path, cap=15):
+        try:
+            items = [i for i in sorted(os.listdir(path))
+                     if not i.startswith(".")]
+        except Exception:
+            return None
+        return items[:cap]
+
+    home = os.path.expanduser("~")
+    parts = []
+    home_names = names(home)
+    if home_names:
+        parts.append("The home folder ~ contains: "
+                     + ", ".join(home_names) + ".")
+    for folder in ("Desktop", "Downloads", "Documents"):
+        items = names(os.path.join(home, folder))
+        if items is None:
+            parts.append(f"~/{folder} does not exist on this computer.")
+        elif items:
+            parts.append(f"~/{folder} contains: " + ", ".join(items) + ".")
+        else:
+            parts.append(f"~/{folder} is empty.")
+    if not parts:
+        return ""
+    return " Computer layout, checked just now: " + " ".join(parts)
+
+
 # ── Claude client (lazy) ─────────────────────────────────────────────────────
 #
 # The Anthropic client is built on first use, not at import time, so
@@ -374,7 +412,7 @@ def chat():
             yield from run_llama_chat(
                 host=OLLAMA_HOST,
                 model=OLLAMA_MODEL,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=SYSTEM_PROMPT + _home_grounding(),
                 plain_history=conversation_history,
                 user_message=user_message,
                 tool_schemas=ACTIVE_TOOL_SCHEMAS,

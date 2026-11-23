@@ -298,6 +298,40 @@ def chat_claude(user_message: str, conversation_history: list) -> tuple[str, lis
     return "Something went wrong — unexpected stop reason.", conversation_history
 
 
+def _home_grounding() -> str:
+    """A short, factual map of the user's home folder, appended to the
+    Llama system prompt per request (same idea as the web server): the
+    small local model searches far more reliably from the actual layout
+    than by guessing which folders exist. Names only, stays local."""
+    import os
+
+    def names(path, cap=15):
+        try:
+            items = [i for i in sorted(os.listdir(path))
+                     if not i.startswith(".")]
+        except Exception:
+            return None
+        return items[:cap]
+
+    home = os.path.expanduser("~")
+    parts = []
+    home_names = names(home)
+    if home_names:
+        parts.append("The home folder ~ contains: "
+                     + ", ".join(home_names) + ".")
+    for folder in ("Desktop", "Downloads", "Documents"):
+        items = names(os.path.join(home, folder))
+        if items is None:
+            parts.append(f"~/{folder} does not exist on this computer.")
+        elif items:
+            parts.append(f"~/{folder} contains: " + ", ".join(items) + ".")
+        else:
+            parts.append(f"~/{folder} is empty.")
+    if not parts:
+        return ""
+    return " Computer layout, checked just now: " + " ".join(parts)
+
+
 def chat_llama(user_message: str, conversation_history: list) -> tuple[str, list]:
     """
     The same agentic loop as chat_claude, served by Llama 3.2 on a
@@ -310,7 +344,8 @@ def chat_llama(user_message: str, conversation_history: list) -> tuple[str, list
                 conversation_history)
 
     tools = ollama_backend.to_ollama_tools(TOOL_SCHEMAS)
-    messages = ollama_backend.to_ollama_messages(SYSTEM_PROMPT, conversation_history)
+    messages = ollama_backend.to_ollama_messages(
+        SYSTEM_PROMPT + _home_grounding(), conversation_history)
     messages.append({"role": "user", "content": user_message})
 
     nudges = 0

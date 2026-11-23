@@ -9,4 +9,7 @@ else git clone https://github.com/Jemimahosei/PocketAi.git ~/PocketAi && cd ~/Po
 fi
 pip3 install -r requirements.txt
 echo "USE_OLLAMA=true" > .env
-python3 agent.py
+echo "Starting PocketAI. Your browser chat opens at http://localhost:5001"
+echo "Leave this window open while you use PocketAI; press Ctrl+C to stop it."
+(sleep 3; open http://localhost:5001 2>/dev/null || xdg-open http://localhost:5001 2>/dev/null) &
+python3 server/app.py

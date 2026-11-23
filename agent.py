@@ -16,7 +16,17 @@ from rich.text import Text
 from rich.rule import Rule
 from rich import box
 
-from config import ANTHROPIC_API_KEY, MODEL, AGENT_NAME, MAX_TOKENS
+try:
+    from config import ANTHROPIC_API_KEY, MODEL, AGENT_NAME, MAX_TOKENS
+except ModuleNotFoundError:
+    print(
+        "PocketAI's terminal chat needs an Anthropic API key first.\n"
+        "Copy the settings template and paste your key into it, then run this again:\n"
+        "    cp config.example.py config.py\n"
+        "For the free version that runs entirely on your own machine, use the web chat:\n"
+        "    python3 server/app.py   (then open http://localhost:5001)"
+    )
+    sys.exit(1)
 from config_manager import get_agent_name
 from tools.file_tool import read_file, list_directory
 from tools.search_tool import search_web

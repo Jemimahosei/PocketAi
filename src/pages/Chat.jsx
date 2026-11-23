@@ -231,7 +231,9 @@ export default function Chat({ onBack, modelId, onPickModel, serverInfo, serverD
                     title={
                       avail === false
                         ? i.id === "llama"
-                          ? "Ollama is not running, so Llama can't answer right now"
+                          ? hosted
+                            ? "Llama runs on your own computer — it isn't part of the hosted demo"
+                            : "Ollama is not running, so Llama can't answer right now"
                           : "Claude is not set up on this server"
                         : i.name
                     }
@@ -251,6 +253,16 @@ export default function Chat({ onBack, modelId, onPickModel, serverInfo, serverD
               Model <span className="mono">{model.modelLabel}</span>
               {model.id === "llama" ? ", running on this computer. Nothing is sent anywhere." : ", via Anthropic."}
             </div>
+            {serverInfo?.backends?.llama?.available === false && (
+              <p className="model-note">
+                {hosted
+                  ? "Llama runs on your own computer, so it isn't part of this hosted demo — the free local install includes it."
+                  : "Llama isn't answering right now — start Ollama to use it."}
+              </p>
+            )}
+            {serverInfo?.backends?.claude?.available === false && (
+              <p className="model-note">Claude needs an API key before it can answer.</p>
+            )}
           </div>
         </aside>
 

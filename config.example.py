@@ -9,6 +9,6 @@
 # (The web chat, server/app.py, does not need this file.)
 
 ANTHROPIC_API_KEY = "sk-ant-your-key-here"
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-5"
 AGENT_NAME = "PocketAI"
 MAX_TOKENS = 1024

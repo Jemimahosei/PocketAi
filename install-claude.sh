@@ -9,7 +9,7 @@ read -p "Enter your Anthropic API key: " key
 echo "ANTHROPIC_API_KEY=$key" > .env
 cat > config.py <<EOF
 ANTHROPIC_API_KEY = "$key"
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-5"
 AGENT_NAME = "PocketAI"
 MAX_TOKENS = 1024
 EOF

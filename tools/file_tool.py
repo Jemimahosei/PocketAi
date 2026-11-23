@@ -12,6 +12,11 @@ def read_file(path: str) -> str:
     """
     try:
         full_path = os.path.expanduser(path)
+        if os.path.isdir(full_path):
+            # Models reach for read_file when they mean "look at this
+            # place" — listing the folder keeps the search moving
+            # instead of dead-ending on an "is a directory" error.
+            return list_directory(path)
         if full_path.lower().endswith('.pdf'):
             # PDFs are binary — hand off to the PDF extractor instead of
             # failing with a UTF-8 decode error.
@@ -45,6 +50,10 @@ def list_directory(path: str = ".") -> str:
     """
     try:
         full_path = os.path.expanduser(path)
+        if os.path.isfile(full_path):
+            # Mirror of the read_file forgiveness: asked to list a
+            # file, return its contents.
+            return read_file(path)
         items = os.listdir(full_path)
         dirs = [f"📁 {item}/" for item in items if os.path.isdir(os.path.join(full_path, item))]
         files = [f"📄 {item}" for item in items if os.path.isfile(os.path.join(full_path, item))]

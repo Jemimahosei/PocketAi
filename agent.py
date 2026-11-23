@@ -83,7 +83,8 @@ SYSTEM_PROMPT = (
     "When asked about files, look in ~/Downloads, ~/Desktop, ~/Documents, and ~ by default; "
     "if a folder does not exist or a file is not in the first place you look, keep trying the other default folders before giving up. "
     "For questions about the user's own files, use the file tools — never search_web; search_web is only for facts about the outside world. "
-    "When a file you found likely answers the question, read it and answer from its contents."
+    "When a file you found likely answers the question, read it and answer from its contents. "
+    "Do not ask the user for permission to look at a folder — just look."
 )
 
 # ── Tool schemas (what we tell Claude it can call) ────────────────────────────

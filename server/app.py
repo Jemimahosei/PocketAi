@@ -97,6 +97,7 @@ if FILE_TOOLS_ENABLED:
         "Never tell the user to run terminal commands themselves — you have tools for that. "
         "For questions about the user's own files or anything on their computer, use the file tools — never search_web; search_web is only for facts about the outside world. "
         "When a file you found likely answers the question, read it and answer from its contents. "
+        "Do not ask the user for permission to look at a folder — just look. "
         "Be concise and direct. Use markdown formatting."
     )
 else:

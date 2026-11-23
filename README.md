@@ -2,45 +2,65 @@
 
 **Live:** https://pocketai-yiai.onrender.com
 
-A local AI assistant that answers questions about your own files. Two frontends over one agentic loop: a terminal CLI and a React web UI, both backed by a Flask server that calls the Claude API. Claude can read files and PDFs, list directories, and search the web, then answer from what it found.
+A personal AI assistant that answers questions about your own files. It runs in two places — a browser chat and a terminal chat — and either one can be powered by two models:
+
+- **Llama 3.2** via [Ollama](https://ollama.com): free, runs entirely on your computer, no account or API key. Nothing leaves your machine.
+- **Claude** via the Anthropic API: sharper on long documents. The text of files you ask about is sent to Anthropic; nothing else is.
+
+Whichever model you pick, PocketAI can read files and PDFs, list folders, and search the web, then answer from what it found. In the browser chat the model switch is in the sidebar; in the terminal, use `/claude` and `/llama` (or start with `--claude` / `--llama`). Each chat only ever uses the model you picked — there is no silent fallback from one to the other.
+
+## Install (one command)
+
+**Free, with Llama:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install.sh -o /tmp/pocketai-install.sh && bash /tmp/pocketai-install.sh
+```
+
+Installs Ollama if needed, downloads Llama 3.2, installs the Python packages, then starts PocketAI and opens the browser chat at http://localhost:5001.
+
+**Smarter, with Claude:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jemimahosei/PocketAi/main/install-claude.sh -o /tmp/pocketai-install-claude.sh && bash /tmp/pocketai-install-claude.sh
+```
+
+Asks for an Anthropic API key once, saves it in `config.py` on your computer, then starts PocketAI the same way. Prefer the terminal? Either install also gives you `python3 agent.py`.
+
+## Run it manually
+
+```bash
+pip install -r requirements.txt
+ollama pull llama3.2             # for the free local model
+cp config.example.py config.py   # optional — only for Claude; add your API key
+python3 server/app.py            # browser chat at http://localhost:5001
+python3 agent.py                 # or the terminal chat
+```
+
+`config.py` is gitignored. Settings can also come from environment variables (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `POCKETAI_BACKEND`, `OLLAMA_HOST`, `OLLAMA_MODEL`). The default Claude model is `claude-sonnet-5`. The agent name can also be saved in `~/.jemi/config.json`.
+
+## The hosted demo
+
+The live site runs the same server, with two differences that matter:
+
+- **File tools are off.** A hosted server must never read files for visitors — not theirs (it can't reach them) and not its own (its environment holds the API key). The hosted chat still answers questions and searches the web, and it says plainly that file access needs the local install. (`POCKETAI_FILE_TOOLS=off`, and automatic whenever Render's `RENDER` variable is present.)
+- **The default model is Claude** (`POCKETAI_BACKEND=claude`), because no Ollama runs on a server. Picking Llama there gets an honest "not available" instead of a quiet swap.
 
 ## Architecture
 
 ```
-CLI (agent.py, Rich terminal UI) ──┐
-                                    ▼
-React + Vite chat UI ── POST /chat (SSE) ──▶ Flask (server/app.py, port 5001)
-                                              │  agentic loop
-                                              ▼
-                                           Claude API (Anthropic)
-                                              │  tool calls
-                                              ▼
-                              read_file · list_directory · read_pdf · search_web
-                              (local files, PyMuPDF, DuckDuckGo)
+Terminal (agent.py, Rich UI) ──┐
+                               ├── agentic loop ── Claude API (Anthropic)
+Browser chat (React + Vite) ───┘        │
+   POST /chat (SSE) ──▶ Flask (server/app.py, port 5001)
+                                        └── or Llama 3.2 via Ollama (server/ollama_backend.py)
+                               tools: read_file · list_directory · read_pdf · search_web
 ```
 
-- **CLI** (`agent.py`): interactive loop with a Rich terminal UI; 3 tools (read_file, list_directory, search_web).
-- **Backend** (`server/app.py`): Flask, two routes — `POST /chat` runs the agentic loop and streams token, tool_call, tool_result, and done events over SSE; `GET /agent-name` returns the agent name. Adds read_pdf as a fourth tool. Runs on port 5001.
-- **Frontend** (`src/App.jsx`): React + Vite chat UI — live token streaming, collapsible tool calls, message edit-and-resend, voice input (Web Speech API), clickable file paths. Talks to the backend at `http://localhost:5001`; dev server on port 5173.
-- **Config**: `config.py` (gitignored, copied from `config.example.py`) holds the Anthropic API key, model (default claude-sonnet-4-20250514), and agent name; the agent name can also be saved in `~/.jemi/config.json`.
+- **Backend** (`server/app.py`): `POST /chat` runs the agentic loop for the chosen backend and streams token, tool_call, tool_result, and done events over SSE; `GET /agent-name` reports the agent name, which backends can actually serve right now, and whether the file tools are on. On a deployed server it also serves the built frontend from `dist/`.
+- **Frontend** (`src/`): React + Vite — live token streaming, collapsible tool calls, message edit-and-resend, voice input (Web Speech API), a "files it opened" sidebar, and the model switch. In development it talks to the backend at `http://localhost:5001` (Vite dev server on port 5173).
+- **Tools** (`tools/`): file and PDF reading (PyMuPDF), directory listing, and DuckDuckGo web search, shared by both interfaces and both models.
 
 ## Stack
 
-Python · Flask · Anthropic Claude API · React 19 · Vite · PyMuPDF · DuckDuckGo
-
-## Run it locally
-
-```bash
-pip install -r requirements.txt
-cp config.example.py config.py   # add your Anthropic API key
-python server/app.py             # backend on port 5001
-# in another terminal:
-npm install
-npm run dev                      # frontend on http://localhost:5173
-```
-
-Or just the CLI: `python agent.py`. Without a key, both frontends explain what's missing instead of crashing.
-
-## Notes
-
-- Files are read locally, but their contents are sent to Anthropic's API so Claude can answer. The API key lives only in gitignored `config.py`.
+Python · Flask · Anthropic Claude API · Ollama (Llama 3.2) · React 19 · Vite · PyMuPDF · DuckDuckGo

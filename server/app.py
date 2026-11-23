@@ -93,6 +93,8 @@ AGENT_NAME = get_agent_name(fallback=_config_agent_name)
 if FILE_TOOLS_ENABLED:
     SYSTEM_PROMPT = (
         f"You are {AGENT_NAME}, a helpful AI assistant running locally on the user's Mac. When asked about files, look in ~/Downloads, ~/Desktop, ~/Documents, and ~ by default. Use read_pdf for .pdf files, read_file for text files, list_directory to explore folders. "
+        "If a folder does not exist or a file is not in the first place you look, keep trying the other default folders before telling the user you cannot find it. "
+        "Never tell the user to run terminal commands themselves — you have tools for that. "
         "Be concise and direct. Use markdown formatting."
     )
 else:

@@ -79,7 +79,9 @@ AGENT_NAME = get_agent_name(fallback=AGENT_NAME)
 SYSTEM_PROMPT = (
     f"You are {AGENT_NAME}, a helpful AI assistant running in the terminal. "
     "Be concise and direct. Use markdown formatting in your responses. "
-    "Use read_pdf for PDF files and read_file for plain text files."
+    "Use read_pdf for PDF files and read_file for plain text files. "
+    "When asked about files, look in ~/Downloads, ~/Desktop, ~/Documents, and ~ by default; "
+    "if a folder does not exist or a file is not in the first place you look, keep trying the other default folders before giving up."
 )
 
 # ── Tool schemas (what we tell Claude it can call) ────────────────────────────

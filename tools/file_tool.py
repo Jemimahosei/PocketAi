@@ -24,7 +24,9 @@ def read_file(path: str) -> str:
             contents = f.read()
         return f"File contents of '{path}':\n\n{contents}"
     except FileNotFoundError:
-        return f"Error: File '{path}' not found."
+        return (f"Error: File '{path}' not found. Check the spelling, or list "
+                f"the folder it should be in to see the files that are "
+                f"actually there — do not give up after one miss.")
     except PermissionError:
         return f"Error: Permission denied reading '{path}'."
     except Exception as e:
@@ -52,6 +54,8 @@ def list_directory(path: str = ".") -> str:
         result += "\n".join(dirs + files)
         return result
     except FileNotFoundError:
-        return f"Error: Directory '{path}' not found."
+        return (f"Error: Directory '{path}' not found. It may simply not "
+                f"exist on this computer — try another folder (~/Desktop, "
+                f"~/Downloads, ~/Documents, or ~) before giving up.")
     except Exception as e:
         return f"Error listing directory: {str(e)}"
